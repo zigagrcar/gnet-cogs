@@ -1,0 +1,9 @@
+{
+  "author": [
+    "zigagrcar"
+  ],
+  "name": "gnet-cogs",
+  "short": "Red-DiscordBot cogs by zigagrcar",
+  "description": "A collection of feature-rich cogs for Red-DiscordBot, including cryptocurrency prices, market charts, and financial indicators.",
+  "install_msg": "Thanks for adding gnet-cogs! Use `[p]cog install gnet-cogs <cog_name>` to install cogs from this repository."
+}

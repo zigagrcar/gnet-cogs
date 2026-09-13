@@ -1,0 +1,29 @@
+{
+  "author": [
+    "zigagrcar"
+  ],
+  "name": "cryptoprices",
+  "min_bot_version": "3.5.0",
+  "min_python_version": [
+    3,
+    9,
+    0
+  ],
+  "description": "Look up cryptocurrency prices and historical charts from CoinGecko, and check the Fear & Greed Index from alternative.me, with in-memory caching to avoid rate limits.",
+  "short": "Cryptocurrency prices, charts, and Fear & Greed Index via CoinGecko.",
+  "install_msg": "Thanks for installing CryptoPrices! Use `[p]crypto <coin> [currency]` to get started, or `[p]help CryptoPrices` for all available commands.",
+  "requirements": [
+    "matplotlib"
+  ],
+  "tags": [
+    "crypto",
+    "coingecko",
+    "prices",
+    "charts",
+    "finance",
+    "utility"
+  ],
+  "end_user_data_statement": "This cog does not persistently store data about users.",
+  "hidden": false,
+  "type": "COG"
+}
