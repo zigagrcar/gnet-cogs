@@ -57,6 +57,6 @@ Load the cog:
 
 ## Requirements
 
-- `matplotlib` (automatically installed via Red's Downloader)
+- Zero external pip requirements (pure Python, discord.py, and aiohttp)
 - Red-DiscordBot >= 3.5.0
 - Python >= 3.9

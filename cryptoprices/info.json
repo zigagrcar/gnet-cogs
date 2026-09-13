@@ -12,9 +12,7 @@
   "description": "Look up cryptocurrency prices and historical charts from CoinGecko, and check the Fear & Greed Index from alternative.me, with in-memory caching to avoid rate limits.",
   "short": "Cryptocurrency prices, charts, and Fear & Greed Index via CoinGecko.",
   "install_msg": "Thanks for installing CryptoPrices! Use `[p]crypto <coin> [currency]` to get started, or `[p]help CryptoPrices` for all available commands.",
-  "requirements": [
-    "matplotlib"
-  ],
+  "requirements": [],
   "tags": [
     "crypto",
     "coingecko",

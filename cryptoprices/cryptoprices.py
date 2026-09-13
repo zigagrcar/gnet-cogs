@@ -6,12 +6,6 @@ from typing import Optional
 
 import aiohttp
 import discord
-import matplotlib
-
-matplotlib.use("Agg")  # headless backend, no display needed on a bot host
-import matplotlib.dates as mdates
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.figure import Figure
 from redbot.core import commands, Config
 from redbot.core.bot import Red
 
@@ -19,6 +13,7 @@ log = logging.getLogger("red.gnet-cogs.cryptoprices")
 
 COINGECKO_API = "https://api.coingecko.com/api/v3"
 ALTERNATIVE_ME_API = "https://api.alternative.me/fng/"
+QUICKCHART_API = "https://quickchart.io/chart"
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=8, connect=4, sock_read=6)
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -195,41 +190,102 @@ class CryptoPrices(commands.Cog):
         self._chart_cache[key] = (prices, time.monotonic())
         return prices
 
-    def _render_chart(
+    async def _render_chart(
         self, prices: list, coin_id: str, currency: str, days: int
-    ) -> io.BytesIO:
-        """Render a simple line chart of price over time to a PNG buffer."""
+    ) -> Optional[io.BytesIO]:
+        """Render a chart using QuickChart.io API without any heavy local C dependencies."""
         import datetime
 
-        timestamps = [
-            datetime.datetime.fromtimestamp(p[0] / 1000, tz=datetime.timezone.utc)
-            for p in prices
-        ]
-        values = [p[1] for p in prices]
+        step = max(1, len(prices) // 100)
+        sampled = prices[::step]
+        if prices[-1] not in sampled:
+            sampled.append(prices[-1])
 
-        fig = Figure(figsize=(8, 4), dpi=120)
-        canvas = FigureCanvasAgg(fig)
-        ax = fig.add_subplot(111)
+        labels = []
+        for p in sampled:
+            dt = datetime.datetime.fromtimestamp(p[0] / 1000, tz=datetime.timezone.utc)
+            if days <= 1:
+                labels.append(dt.strftime("%H:%M"))
+            elif days <= 7:
+                labels.append(dt.strftime("%a %H:%M"))
+            else:
+                labels.append(dt.strftime("%b %d"))
 
-        ax.plot(timestamps, values, linewidth=1.5, color="#f2a900")
-        ax.fill_between(timestamps, values, min(values), alpha=0.1, color="#f2a900")
+        values = [round(p[1], 6) if p[1] < 1 else round(p[1], 2) for p in sampled]
 
-        ax.set_title(f"{coin_id.capitalize()} price — last {days}d ({currency.upper()})")
-        ax.set_ylabel(currency.upper())
-        if days <= 1:
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        elif days <= 7:
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d"))
-        else:
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
-        fig.autofmt_xdate()
-        ax.grid(alpha=0.2)
-        fig.tight_layout()
+        start_p, end_p = sampled[0][1], sampled[-1][1]
+        line_color = "#10b981" if end_p >= start_p else "#ef4444"
+        bg_color = (
+            "rgba(16, 185, 129, 0.12)" if end_p >= start_p else "rgba(239, 68, 68, 0.12)"
+        )
 
-        buf = io.BytesIO()
-        canvas.print_png(buf)
-        buf.seek(0)
-        return buf
+        chart_config = {
+            "type": "line",
+            "data": {
+                "labels": labels,
+                "datasets": [
+                    {
+                        "label": f"{coin_id.upper()} ({currency.upper()})",
+                        "data": values,
+                        "borderColor": line_color,
+                        "backgroundColor": bg_color,
+                        "fill": True,
+                        "borderWidth": 2,
+                        "pointRadius": 0,
+                        "tension": 0.2,
+                    }
+                ],
+            },
+            "options": {
+                "legend": {"display": False},
+                "title": {
+                    "display": True,
+                    "text": f"{coin_id.capitalize()} — Last {days}d ({currency.upper()})",
+                    "fontColor": "#f3f4f6",
+                    "fontSize": 16,
+                },
+                "scales": {
+                    "xAxes": [
+                        {
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
+                            "ticks": {
+                                "fontColor": "#9ca3af",
+                                "maxTicksLimit": 8,
+                                "autoSkip": True,
+                            },
+                        }
+                    ],
+                    "yAxes": [
+                        {
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
+                            "ticks": {"fontColor": "#9ca3af"},
+                        }
+                    ],
+                },
+            },
+        }
+
+        payload = {
+            "backgroundColor": "#1e1f22",
+            "width": 800,
+            "height": 400,
+            "devicePixelRatio": 1.5,
+            "format": "png",
+            "chart": chart_config,
+        }
+
+        try:
+            async with self.session.post(
+                QUICKCHART_API, json=payload, timeout=REQUEST_TIMEOUT
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    buf = io.BytesIO(data)
+                    buf.seek(0)
+                    return buf
+        except Exception as e:
+            log.warning(f"Failed to generate QuickChart: {e}")
+        return None
 
     async def _fetch_fear_greed(self, limit: int) -> Optional[list]:
         """Return a list of Fear & Greed Index entries (newest first), using
@@ -281,40 +337,86 @@ class CryptoPrices(commands.Cog):
             return discord.Color.green()
         return discord.Color.dark_green()
 
-    def _render_fng_chart(self, entries: list) -> io.BytesIO:
-        """Render a simple line chart of Fear & Greed values over time."""
+    async def _render_fng_chart(self, entries: list) -> Optional[io.BytesIO]:
+        """Render Fear & Greed trend chart using QuickChart.io API."""
         import datetime
 
-        # alternative.me returns newest first; reverse for chronological order.
         entries = list(reversed(entries))
-        timestamps = [
-            datetime.datetime.fromtimestamp(int(e["timestamp"]), tz=datetime.timezone.utc)
+        labels = [
+            datetime.datetime.fromtimestamp(
+                int(e["timestamp"]), tz=datetime.timezone.utc
+            ).strftime("%b %d")
             for e in entries
         ]
         values = [int(e["value"]) for e in entries]
 
-        fig = Figure(figsize=(8, 4), dpi=120)
-        canvas = FigureCanvasAgg(fig)
-        ax = fig.add_subplot(111)
+        chart_config = {
+            "type": "line",
+            "data": {
+                "labels": labels,
+                "datasets": [
+                    {
+                        "label": "Fear & Greed Index",
+                        "data": values,
+                        "borderColor": "#8b5cf6",
+                        "backgroundColor": "rgba(139, 92, 246, 0.15)",
+                        "fill": True,
+                        "borderWidth": 2,
+                        "pointRadius": 1 if len(values) <= 30 else 0,
+                        "tension": 0.2,
+                    }
+                ],
+            },
+            "options": {
+                "legend": {"display": False},
+                "title": {
+                    "display": True,
+                    "text": "Crypto Fear & Greed Index History",
+                    "fontColor": "#f3f4f6",
+                    "fontSize": 16,
+                },
+                "scales": {
+                    "xAxes": [
+                        {
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
+                            "ticks": {
+                                "fontColor": "#9ca3af",
+                                "maxTicksLimit": 8,
+                                "autoSkip": True,
+                            },
+                        }
+                    ],
+                    "yAxes": [
+                        {
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
+                            "ticks": {"fontColor": "#9ca3af", "min": 0, "max": 100},
+                        }
+                    ],
+                },
+            },
+        }
 
-        ax.plot(timestamps, values, linewidth=1.5, color="#8b5cf6")
-        ax.axhspan(0, 25, color="#b91c1c", alpha=0.08)
-        ax.axhspan(25, 50, color="#f59e0b", alpha=0.08)
-        ax.axhspan(50, 75, color="#22c55e", alpha=0.08)
-        ax.axhspan(75, 100, color="#15803d", alpha=0.08)
+        payload = {
+            "backgroundColor": "#1e1f22",
+            "width": 800,
+            "height": 400,
+            "devicePixelRatio": 1.5,
+            "format": "png",
+            "chart": chart_config,
+        }
 
-        ax.set_title("Crypto Fear & Greed Index")
-        ax.set_ylabel("Index (0-100)")
-        ax.set_ylim(0, 100)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
-        fig.autofmt_xdate()
-        ax.grid(alpha=0.2)
-        fig.tight_layout()
-
-        buf = io.BytesIO()
-        canvas.print_png(buf)
-        buf.seek(0)
-        return buf
+        try:
+            async with self.session.post(
+                QUICKCHART_API, json=payload, timeout=REQUEST_TIMEOUT
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    buf = io.BytesIO(data)
+                    buf.seek(0)
+                    return buf
+        except Exception as e:
+            log.warning(f"Failed to generate Fear & Greed QuickChart: {e}")
+        return None
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -382,10 +484,10 @@ class CryptoPrices(commands.Cog):
         current, start = values[-1], values[0]
         change_pct = ((current - start) / start) * 100 if start else 0
 
-        chart_buf = await self.bot.loop.run_in_executor(
-            None, self._render_chart, prices, coin_id, currency, days
+        chart_buf = await self._render_chart(prices, coin_id, currency, days)
+        chart_file = (
+            discord.File(chart_buf, filename="chart.png") if chart_buf else None
         )
-        chart_file = discord.File(chart_buf, filename="chart.png")
 
         embed = discord.Embed(
             title=f"{coin_id.capitalize()} — last {days} day(s)",
@@ -394,7 +496,8 @@ class CryptoPrices(commands.Cog):
         embed.add_field(name="Current", value=f"{current:,.6g} {currency.upper()}")
         embed.add_field(name="Change", value=f"{change_pct:+.2f}%")
         embed.add_field(name="High / Low", value=f"{max(values):,.6g} / {min(values):,.6g}")
-        embed.set_image(url="attachment://chart.png")
+        if chart_file:
+            embed.set_image(url="attachment://chart.png")
         cache_minutes = await self.config.cache_minutes()
         embed.set_footer(text=f"Source: CoinGecko • cached up to {cache_minutes} min")
 
@@ -479,11 +582,10 @@ class CryptoPrices(commands.Cog):
 
         file = None
         if days > 1 and len(entries) > 1:
-            chart_buf = await self.bot.loop.run_in_executor(
-                None, self._render_fng_chart, entries
-            )
-            file = discord.File(chart_buf, filename="feargreed.png")
-            embed.set_image(url="attachment://feargreed.png")
+            chart_buf = await self._render_fng_chart(entries)
+            if chart_buf:
+                file = discord.File(chart_buf, filename="feargreed.png")
+                embed.set_image(url="attachment://feargreed.png")
 
         await ctx.send(embed=embed, file=file)
 
