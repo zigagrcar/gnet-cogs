@@ -12,7 +12,7 @@ Powered by the public [CoinGecko API](https://www.coingecko.com/en/api) and [Alt
 - **Interactive Price Charts (`[p]cryptoinfo`):** Generate historical price trend charts for timeframes from 1 to 365 days, rendered via headless Matplotlib.
 - **Crypto Fear & Greed Index (`[p]feargreed`):** View today's crypto market sentiment score or chart historical sentiment over time.
 - **In-Memory Caching:** Automatically caches prices, chart data, and index results to avoid hitting public API rate limits. Cache duration is configurable by the bot owner.
-- **Ticker Aliases:** Built-in alias map for common tickers (`btc`, `eth`, `sol`, `doge`, `ada`, `xrp`, `bnb`, `ltc`, `usdt`, `usdc`) so you don't need to look up CoinGecko IDs.
+- **Ticker & Name Resolution:** Built-in alias map for top cryptos plus dynamic lookup via CoinGecko's search endpoint. Look up coins by ticker (`imx`, `stx`, `btc`, `sol`, `fet`, `rndr`, `tia`, etc.) or full coin names without needing to know CoinGecko's internal IDs.
 
 ---
 

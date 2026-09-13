@@ -82,19 +82,61 @@ class CryptoPrices(commands.Cog):
         # In-memory cache for the fear & greed index: {limit: (data, fetched_at)}
         self._fng_cache: dict[int, tuple[list, float]] = {}
 
-        # Small convenience map so users can type common tickers instead
-        # of CoinGecko's internal ids.
+        # In-memory cache for dynamically searched tickers -> CoinGecko IDs
+        self._dynamic_alias_cache: dict[str, str] = {}
+
+        # Preloaded map of popular tickers to CoinGecko IDs for instant resolution
         self._alias_map = {
             "btc": "bitcoin",
             "eth": "ethereum",
             "sol": "solana",
-            "doge": "dogecoin",
-            "ada": "cardano",
+            "stx": "blockstack",
+            "imx": "immutable-x",
             "xrp": "ripple",
+            "ada": "cardano",
+            "doge": "dogecoin",
             "bnb": "binancecoin",
+            "dot": "polkadot",
+            "matic": "matic-network",
+            "pol": "polygon-ecosystem-token",
+            "link": "chainlink",
+            "avax": "avalanche-2",
+            "shib": "shiba-inu",
+            "trx": "tron",
+            "near": "near",
+            "atom": "cosmos",
+            "arb": "arbitrum",
+            "op": "optimism",
+            "sui": "sui",
+            "apt": "aptos",
+            "ton": "the-open-network",
+            "kas": "kaspa",
+            "fet": "artificial-superintelligence-alliance",
+            "rndr": "render-token",
+            "render": "render-token",
+            "pepe": "pepe",
+            "wif": "dogwifcoin",
+            "tao": "bittensor",
+            "uni": "uniswap",
             "ltc": "litecoin",
+            "bch": "bitcoin-cash",
+            "xlm": "stellar",
+            "etc": "ethereum-classic",
+            "xmr": "monero",
+            "fil": "filecoin",
+            "vet": "vechain",
+            "inj": "injective-protocol",
+            "tia": "celestia",
+            "sei": "sei-network",
+            "rune": "thorchain",
+            "algo": "algorand",
+            "icp": "internet-computer",
+            "aave": "aave",
+            "mkr": "maker",
+            "cro": "crypto-com-chain",
             "usdt": "tether",
             "usdc": "usd-coin",
+            "dai": "dai",
         }
 
     async def cog_unload(self):
@@ -104,9 +146,69 @@ class CryptoPrices(commands.Cog):
         """Nothing to delete — this cog does not store user data."""
         return
 
-    def _resolve_id(self, coin: str) -> str:
-        coin = coin.lower().strip()
-        return self._alias_map.get(coin, coin)
+    async def _resolve_id(self, coin: str) -> str:
+        """Resolve a user-provided ticker/name to CoinGecko's internal API ID.
+        Checks hardcoded common aliases first, then dynamic memory cache,
+        and finally searches CoinGecko's search endpoint.
+        """
+        coin_clean = coin.lower().strip()
+        if coin_clean in self._alias_map:
+            return self._alias_map[coin_clean]
+
+        if coin_clean in self._dynamic_alias_cache:
+            return self._dynamic_alias_cache[coin_clean]
+
+        try:
+            params = {"query": coin_clean}
+            async with self.session.get(
+                f"{COINGECKO_API}/search", params=params, timeout=REQUEST_TIMEOUT
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    coins = data.get("coins", [])
+                    if coins:
+                        # 1. Exact symbol match with highest market cap rank (lowest rank number)
+                        symbol_matches = [
+                            c for c in coins if c.get("symbol", "").lower() == coin_clean
+                        ]
+                        if symbol_matches:
+                            symbol_matches.sort(
+                                key=lambda x: x.get("market_cap_rank") or 999999
+                            )
+                            best_id = symbol_matches[0]["id"]
+                            self._dynamic_alias_cache[coin_clean] = best_id
+                            return best_id
+
+                        # 2. Exact ID match
+                        id_matches = [
+                            c for c in coins if c.get("id", "").lower() == coin_clean
+                        ]
+                        if id_matches:
+                            best_id = id_matches[0]["id"]
+                            self._dynamic_alias_cache[coin_clean] = best_id
+                            return best_id
+
+                        # 3. Exact name match
+                        name_matches = [
+                            c for c in coins if c.get("name", "").lower() == coin_clean
+                        ]
+                        if name_matches:
+                            name_matches.sort(
+                                key=lambda x: x.get("market_cap_rank") or 999999
+                            )
+                            best_id = name_matches[0]["id"]
+                            self._dynamic_alias_cache[coin_clean] = best_id
+                            return best_id
+
+                        # 4. Fallback to top ranked search result
+                        coins.sort(key=lambda x: x.get("market_cap_rank") or 999999)
+                        best_id = coins[0]["id"]
+                        self._dynamic_alias_cache[coin_clean] = best_id
+                        return best_id
+        except Exception:
+            pass
+
+        return coin_clean
 
     async def _get_cache_seconds(self) -> int:
         return await self.config.cache_minutes() * 60
@@ -439,12 +541,13 @@ class CryptoPrices(commands.Cog):
 
         Example:
         - `[p]coin btc`
-        - `[p]coin sol eur`
+        - `[p]coin imx`
+        - `[p]coin stx eur`
         """
         currency = currency.lower().strip()
-        coin_id = self._resolve_id(coin)
 
         async with ctx.typing():
+            coin_id = await self._resolve_id(coin)
             try:
                 price = await self._fetch_price(coin_id, currency)
             except CryptoAPIError as e:
@@ -473,14 +576,15 @@ class CryptoPrices(commands.Cog):
 
         Example:
         - `[p]cryptoinfo btc`
-        - `[p]cryptoinfo btc eur`
+        - `[p]cryptoinfo imx`
+        - `[p]cryptoinfo stx eur`
         - `[p]cryptoinfo ethereum 30 eur`
         """
         currency = currency.lower().strip()
-        coin_id = self._resolve_id(coin)
         days = max(1, min(days or 7, 365))
 
         async with ctx.typing():
+            coin_id = await self._resolve_id(coin)
             try:
                 prices = await self._fetch_chart(coin_id, currency, days)
             except CryptoAPIError as e:
@@ -522,19 +626,21 @@ class CryptoPrices(commands.Cog):
     async def crypto(self, ctx: commands.Context, coin: str, currency: str = "usd"):
         """Get the current price of a cryptocurrency.
 
-        `coin` can be a common ticker (btc, eth, sol, ...) or a CoinGecko id
-        (e.g. `bitcoin`, `ethereum`).
+        `coin` can be a common ticker (btc, eth, imx, stx, ...) or a CoinGecko id
+        (e.g. `bitcoin`, `ethereum`, `immutable-x`, `blockstack`).
         `currency` defaults to usd, but any CoinGecko-supported currency works
         (eur, gbp, jpy, ...).
 
         Example:
         - `[p]crypto btc`
+        - `[p]crypto imx`
+        - `[p]crypto stx eur`
         - `[p]crypto ethereum eur`
         """
         currency = currency.lower().strip()
-        coin_id = self._resolve_id(coin)
 
         async with ctx.typing():
+            coin_id = await self._resolve_id(coin)
             try:
                 price = await self._fetch_price(coin_id, currency)
             except CryptoAPIError as e:
@@ -610,6 +716,7 @@ class CryptoPrices(commands.Cog):
         self._cache.clear()
         self._chart_cache.clear()
         self._fng_cache.clear()
+        self._dynamic_alias_cache.clear()
         await ctx.send("Crypto price, chart, and fear/greed cache cleared.")
 
     @commands.is_owner()
@@ -623,4 +730,5 @@ class CryptoPrices(commands.Cog):
         self._cache.clear()
         self._chart_cache.clear()
         self._fng_cache.clear()
+        self._dynamic_alias_cache.clear()
         await ctx.send(f"Cache duration set to {minutes} minute(s). Cache cleared.")
