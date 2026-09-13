@@ -214,9 +214,9 @@ class CryptoPrices(commands.Cog):
         values = [round(p[1], 6) if p[1] < 1 else round(p[1], 2) for p in sampled]
 
         start_p, end_p = sampled[0][1], sampled[-1][1]
-        line_color = "#10b981" if end_p >= start_p else "#ef4444"
+        line_color = "#57f287" if end_p >= start_p else "#ed4245"  # Discord Green / Discord Red
         bg_color = (
-            "rgba(16, 185, 129, 0.12)" if end_p >= start_p else "rgba(239, 68, 68, 0.12)"
+            "rgba(87, 242, 135, 0.12)" if end_p >= start_p else "rgba(237, 66, 69, 0.12)"
         )
 
         chart_config = {
@@ -230,9 +230,9 @@ class CryptoPrices(commands.Cog):
                         "borderColor": line_color,
                         "backgroundColor": bg_color,
                         "fill": True,
-                        "borderWidth": 2,
+                        "borderWidth": 2.5,
                         "pointRadius": 0,
-                        "tension": 0.2,
+                        "tension": 0.25,
                     }
                 ],
             },
@@ -241,15 +241,18 @@ class CryptoPrices(commands.Cog):
                 "title": {
                     "display": True,
                     "text": f"{coin_id.capitalize()} — Last {days}d ({currency.upper()})",
-                    "fontColor": "#f3f4f6",
+                    "fontColor": "#f2f3f5",
+                    "fontFamily": "gg sans, Noto Sans, Helvetica Neue, Arial, sans-serif",
                     "fontSize": 16,
+                    "padding": 16,
                 },
                 "scales": {
                     "xAxes": [
                         {
-                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.05)"},
                             "ticks": {
-                                "fontColor": "#9ca3af",
+                                "fontColor": "#949ba4",
+                                "fontFamily": "gg sans, Noto Sans, Helvetica Neue, Arial, sans-serif",
                                 "maxTicksLimit": 8,
                                 "autoSkip": True,
                             },
@@ -257,8 +260,11 @@ class CryptoPrices(commands.Cog):
                     ],
                     "yAxes": [
                         {
-                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
-                            "ticks": {"fontColor": "#9ca3af"},
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.05)"},
+                            "ticks": {
+                                "fontColor": "#949ba4",
+                                "fontFamily": "gg sans, Noto Sans, Helvetica Neue, Arial, sans-serif",
+                            },
                         }
                     ],
                 },
@@ -266,7 +272,7 @@ class CryptoPrices(commands.Cog):
         }
 
         payload = {
-            "backgroundColor": "#1e1f22",
+            "backgroundColor": "#2b2d31",  # Discord Embed Background
             "width": 800,
             "height": 400,
             "devicePixelRatio": 1.5,
@@ -358,12 +364,12 @@ class CryptoPrices(commands.Cog):
                     {
                         "label": "Fear & Greed Index",
                         "data": values,
-                        "borderColor": "#8b5cf6",
-                        "backgroundColor": "rgba(139, 92, 246, 0.15)",
+                        "borderColor": "#5865f2",  # Discord Blurple
+                        "backgroundColor": "rgba(88, 101, 242, 0.15)",
                         "fill": True,
-                        "borderWidth": 2,
+                        "borderWidth": 2.5,
                         "pointRadius": 1 if len(values) <= 30 else 0,
-                        "tension": 0.2,
+                        "tension": 0.25,
                     }
                 ],
             },
@@ -372,15 +378,18 @@ class CryptoPrices(commands.Cog):
                 "title": {
                     "display": True,
                     "text": "Crypto Fear & Greed Index History",
-                    "fontColor": "#f3f4f6",
+                    "fontColor": "#f2f3f5",
+                    "fontFamily": "gg sans, Noto Sans, Helvetica Neue, Arial, sans-serif",
                     "fontSize": 16,
+                    "padding": 16,
                 },
                 "scales": {
                     "xAxes": [
                         {
-                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.05)"},
                             "ticks": {
-                                "fontColor": "#9ca3af",
+                                "fontColor": "#949ba4",
+                                "fontFamily": "gg sans, Noto Sans, Helvetica Neue, Arial, sans-serif",
                                 "maxTicksLimit": 8,
                                 "autoSkip": True,
                             },
@@ -388,8 +397,13 @@ class CryptoPrices(commands.Cog):
                     ],
                     "yAxes": [
                         {
-                            "gridLines": {"color": "rgba(255, 255, 255, 0.08)"},
-                            "ticks": {"fontColor": "#9ca3af", "min": 0, "max": 100},
+                            "gridLines": {"color": "rgba(255, 255, 255, 0.05)"},
+                            "ticks": {
+                                "fontColor": "#949ba4",
+                                "fontFamily": "gg sans, Noto Sans, Helvetica Neue, Arial, sans-serif",
+                                "min": 0,
+                                "max": 100,
+                            },
                         }
                     ],
                 },
@@ -397,7 +411,7 @@ class CryptoPrices(commands.Cog):
         }
 
         payload = {
-            "backgroundColor": "#1e1f22",
+            "backgroundColor": "#2b2d31",  # Discord Embed Background
             "width": 800,
             "height": 400,
             "devicePixelRatio": 1.5,
